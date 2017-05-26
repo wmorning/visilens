@@ -137,6 +137,13 @@ def pass_priors(p,lens,source,scaleamp,shiftphase):
                               thislens[i]._altered = True
                               thislens[i].__dict__[key]['value'] = p[ip]
                               ip += 1
+            elif ilens.__class__.__name__=='Multipoles':
+                  for key in ['A3','B3','A4','B4']:
+                        if not vars(ilens)[key]['fixed']:
+                              if p[ip] < vars(ilens)[key]['prior'][0] or p[ip] > vars(ilens)[key]['prior'][1]: return False
+                              thislens[i]._altered = True
+                              thislens[i].__dict__[key]['value'] = p[ip]
+                              ip += 1
       # now do the source(s)
       for i,src in enumerate(source): # Source is a list of source objects
             if src.__class__.__name__=='GaussSource':

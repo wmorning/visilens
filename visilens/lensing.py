@@ -32,6 +32,7 @@ def LensRayTrace(xim,yim,lens,Dd,Ds,Dds):
       for i,ilens in enumerate(lens):
             if ilens.__class__.__name__ == 'SIELens': ilens.deflect(xim,yim,Dd,Ds,Dds)
             elif ilens.__class__.__name__ == 'ExternalShear': ilens.deflect(xim,yim,lens[0])
+            elif ilens.__class__.__name__ == 'Multipoles': ilens.deflect(xim,yim,lens[0])
             ximage += ilens.deflected_x; yimage += ilens.deflected_y
       
       return ximage,yimage
@@ -107,7 +108,7 @@ def GenerateLensingGrid(data=None,xmax=None,emissionbox=[-5,5,-5,5],fieldres=Non
       xmapfield,ymapfield = np.meshgrid(fieldcoords,fieldcoords)
 
       # Calculate the indices where the high-resolution lensing grid meets the larger field grid
-      indices = np.round(np.interp(np.asarray(emissionbox),fieldcoords,np.arange(Nfield)))
+      indices = np.round(np.interp(np.asarray(emissionbox),fieldcoords,np.arange(Nfield))).astype(int)
 
       # Calculate the grid coordinates for the high-res lensing grid; grids meet at indices. Some pixel-shifting reqd.
       Nemx = 1 + np.abs(indices[1]-indices[0])*np.ceil((fieldcoords[1]-fieldcoords[0])/(2*emitres*rad2arcsec))
