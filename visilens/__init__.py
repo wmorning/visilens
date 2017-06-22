@@ -5,3 +5,4 @@ from lensing import *
 from calc_likelihood import *
 from triangleplot import *
 from plot_images import *
+from LensModelDifferentialEvolution import *
