@@ -1,9 +1,16 @@
 __all__ = ['Visdata','SersicSource','GaussSource','PointSource','SIELens','ExternalShear',
-            'read_visdata','concatvis','bin_visibilities','Multipoles']
+            'read_visdata','concatvis','bin_visibilities','Multipoles','PowerKappa']
 
 import numpy as np
 import astropy.constants as co
+from astropy import units
 from utils import cart2pol,pol2cart
+try:
+    import _fastell
+    Fastell_loaded = True
+except ImportError:
+    print "Could not load the PowerKappa lens model.\n"
+    Fastell_loaded = False
 
 c = co.c.value # speed of light, in m/s
 G = co.G.value # gravitational constant in SI units
@@ -194,7 +201,7 @@ class SIELens(object):
             self.M = M
             self.e = e
             self.PA = PA
-            self.gamma = 1.0
+            self.gamma = {'value':1.0,'fixed':True}
             
             # Here we keep a Boolean flag which tells us whether one of the lens
             # properties has changed since the last time we did the lensing
@@ -253,6 +260,190 @@ class SIELens(object):
                   self.deflected_x = dxs
                   self.deflected_y = dys
                   self._altered = False
+                  
+class PowerKappa(object):
+    """
+    Class to hold parameters for an Elliptical Power-law lens, with each 
+    parameter (besides redshift) a dictionary.  This model simplifies to
+    an SIE model in the case of fixed gamma = 1.
+      
+    Example format of each parameter:
+    x = {'value':x0,'fixed':False,'prior':[xmin,xmax]}, where x0 is the
+    initial/current value of x, x should not be a fixed parameter during fitting,
+    and the value of x must be between xmin and xmax.
+      
+    Parameter Convention will be the same as that from the Ripples software,
+    for easy compatibility.
+
+    Parameters:
+    z
+            Lens redshift. If unknown, any value can be chosen as long as it is
+            less than the source redshift you know/assume.
+    x, y
+            Position of the lens, in arcseconds relative to the phase center of
+            the data (or any other reference point of your choosing). +x is west 
+            (sorry not sorry), +y is north.
+    M
+            Lens-mass.  For better MCMC sampling, this will take the base-10 logarithm
+            of the mass.
+    ex,ey
+            The x and y components of the ellipticity.  For sampling efficiency, we will
+            write the components as 10 times the ellipticity components.
+            A de-facto prior is included here.  Since the ellipticity must be less than 1,
+            but the _fastell software still produces a real number for any e>1, we will 
+            return the deflections as np.inf for all e>1.
+    gamma
+            The slope of the power-law.  Only works properly for 0 < gamma < 2.  Choose
+            your priors accordingly.
+    rc
+            The EPMD model allows for a non-singular core at the center.  We give this as 
+            an option.
+    """
+    
+    def __init__(self,z,x,y,M,ex,ey,gamma,rc):
+        # Do some input handling.
+        if not isinstance(x,dict):
+            x = {'value':x,'fixed':False,'prior':[-30.,30.]}
+        if not isinstance(y,dict):
+            y = {'value':y,'fixed':False,'prior':[-30.,30.]}
+        if not isinstance(M,dict):
+            M = {'value':M,'fixed':False,'prior':[0.5,1.5]}
+        if not isinstance(ex,dict):
+            ex = {'value':ex,'fixed':False,'prior':[-10,10]}
+        if not isinstance(ey,dict):
+            PA = {'value':ey,'fixed':False,'prior':[-10.,10]}
+        if not isinstance(ey,dict):
+            gamma = {'value':gamma,'fixed':False,'prior':[0,2]}
+        if not isinstance(rc,dict):
+            rc = {'value':rc,'fixed':False,'prior':[0,1]}
+
+        if not all(['value' in d for d in [x,y,M,ex,ey,gamma]]): 
+              raise KeyError("All parameter dicts must contain the key 'value'.")
+
+        if not 'fixed' in x: x['fixed'] = False
+        if not 'fixed' in y: y['fixed'] = False
+        if not 'fixed' in M: M['fixed'] = False  
+        if not 'fixed' in ex: ex['fixed'] = False
+        if not 'fixed' in ey: ey['fixed'] = False
+        if not 'fixed' in gamma: gamma['fixed'] = False
+        if not 'fixed' in rc: rc['fixed'] = False
+        
+        if not 'prior' in x: x['prior'] = [-30.,30.]
+        if not 'prior' in y: y['prior'] = [-30.,30.]
+        if not 'prior' in M: M['prior'] = [0.5,1.5]
+        if not 'prior' in ex: ex['prior'] = [-10,10]
+        if not 'prior' in ey: ey['prior'] = [-10,10]
+        if not 'prior' in gamma: gamma['prior'] = [0.,180.]
+        if not 'prior' in rc: rc['prior'] = [0.,180.]
+
+        self.z = z
+        self.x = x
+        self.y = y
+        self.M = M
+        self.ex = ex
+        self.ey = ey
+        self.gamma = gamma
+        self.rc = rc
+        
+        self.PA = {'value':np.arctan2(ey['value'],ex['value']),'fixed':False,'prior':[0,180.]}
+        
+        # Here we keep a Boolean flag which tells us whether one of the lens
+        # properties has changed since the last time we did the lensing
+        # deflections. If everything is the same, we don't need to lens twice.
+        self._altered = True
+        
+    def deflect(self,xim,yim,Dd,Ds,Dds):
+        """
+        Follow Barkana+1998 for the lensing deflections.  Uses a numerically
+        integrated routine accurate to roughly 1e-7
+        
+        Parameters:
+        xim, yim
+              2D Arrays of image coordinates we're going to lens,
+              probably generated by np.meshgrid.
+        Dd, Ds, Dds
+              Distances to the lens, source and between the source
+              and lens (units don't matter as long as they're the 
+              same). Can't be calculated only from lens due to source
+              distances.
+        """
+        if self._altered: # Only redo if something is new.
+            ximage, yimage = xim.copy(), yim.copy() # for safety.
+            
+            Q = self.compute_Q(Dd,Ds,Dds)
+            # ellipticity and axis ratio
+            elp = 0.1 * np.sqrt(self.ex['value']**2+self.ey['value']**2)
+            q = 1-elp
+            # rotation angle
+            ang = np.arctan2(self.ey['value'],self.ex['value']) + np.pi / 2.
+            
+            
+            # Flip units, the recenter and rotate grid to lens center and major axis
+            ximage *= arcsec2rad; yimage *= arcsec2rad
+            ximage -= (self.x['value']*arcsec2rad)
+            yimage -= (self.y['value']*arcsec2rad)
+            
+            # Rotate image coordinates
+            if not np.isclose(ang, 0.):
+                r,theta = cart2pol(ximage,yimage)
+                ximage,yimage = pol2cart(r,theta-ang)
+            
+            dxs = np.empty(len(ximage.ravel()))
+            dys = np.empty(len(ximage.ravel()))
+            
+            if q > 0:
+                _fastell.fastelldefl_array(ximage.ravel(),yimage.ravel(),Q,self.gamma['value']/2.,q,self.rc['value'],dxs,dys,len(dxs))
+            else:
+                dxs -= np.inf
+                dys -= np.inf
+            
+            # reshape deflection angles back to 2d
+            dxs = -dxs.reshape(ximage.shape)
+            dys = -dys.reshape(yimage.shape)
+            
+            
+            
+            # Rotate and shift back to sky frame
+            if not np.isclose(ang, 0.):
+                r,theta = cart2pol(dxs,dys)
+                dxs,dys = pol2cart(r,theta+(ang))
+            dxs *= rad2arcsec; dys *= rad2arcsec
+            
+            self.deflected_x = dxs
+            self.deflected_y = dys
+            self._altered = False
+            
+            # Need to update position angle, so that shear works properly
+            self.PA['value'] = np.arctan2(self.ey['value'],self.ex['value'])
+            
+    def compute_Q(self,Dd,Ds,Dds):
+        """
+        The Barkana 1998 model uses an annoying parameter Q for the deflection scale.
+        It is a mixed combination of a number of things, so we set this function aside
+        so that all the ugly math can be done here rather than in the deflect function.
+        """
+        Mass = 10**(10*self.M['value']) * units.solMass
+        q = 1- 0.1 * np.sqrt(self.ex['value']**2+self.ey['value']**2)
+        rc = self.rc['value'] * arcsec2rad
+        gam = self.gamma['value']/2.
+        
+        # Units should be Mpc from astropy.cosmology, this is risky.
+        Dd = Dd * units.Mpc
+        Ds = Ds * units.Mpc
+        Dds = Dds * units.Mpc
+        SigmaCrit = (co.c**2 / (4*np.pi * co.G) * Ds/(Dd*Dds)*Dd**2).decompose()
+        
+        
+        
+        sigma = np.sqrt(Mass / np.sqrt(q) * co.G / (10. * units.kpc) / np.pi).to(units.km/units.s)
+        R_mass = 10e03 / Dd.to(units.pc).value 
+        
+        Q = (Mass / (2*np.pi * SigmaCrit * (rc**(2*(1-gam))-(R_mass**2+rc**2)**(1-gam))/(2.0*(gam-1.0)) ) / (q))
+        
+        
+        
+        return Q.decompose().value
+        
             
 
 class ExternalShear(object):
@@ -323,6 +514,7 @@ class ExternalShear(object):
                   dxs,dys = pol2cart(r,theta+(lens.PA['value']*deg2rad))
                   
             self.deflected_x = dxs; self.deflected_y = dys
+            
             
 class Multipoles(object):
     """
@@ -403,7 +595,7 @@ class Multipoles(object):
         # Rs defines radial scaling of multipole deflection
         Rs = np.pi / 180.0 / 3600.0
         # Gamma defines slope of this radial scaling
-        GAMMA = lens.gamma
+        GAMMA = lens.gamma['value']
         a3 = self.A3['value']
         b3 = self.B3['value']
         a4 = self.A4['value']
@@ -422,8 +614,10 @@ class Multipoles(object):
         alphaX = alphaR * np.cos(theta) - alphaTheta * np.sin(theta)
         alphaY = alphaR * np.sin(theta) + alphaTheta * np.cos(theta)
         
-        self.deflected_x = -alphaX * 3600.0 * 180.0 / np.pi
-        self.deflected_y = -alphaY * 3600.0 * 180.0 / np.pi
+        self.deflected_x = alphaX * 3600.0 * 180.0 / np.pi
+        self.deflected_y = alphaY * 3600.0 * 180.0 / np.pi
+        
+        
         
     
 

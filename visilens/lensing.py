@@ -31,9 +31,12 @@ def LensRayTrace(xim,yim,lens,Dd,Ds,Dds):
       
       for i,ilens in enumerate(lens):
             if ilens.__class__.__name__ == 'SIELens': ilens.deflect(xim,yim,Dd,Ds,Dds)
+            elif ilens.__class__.__name__ == 'PowerKappa': ilens.deflect(xim,yim,Dd,Ds,Dds)
             elif ilens.__class__.__name__ == 'ExternalShear': ilens.deflect(xim,yim,lens[0])
             elif ilens.__class__.__name__ == 'Multipoles': ilens.deflect(xim,yim,lens[0])
+            
             ximage += ilens.deflected_x; yimage += ilens.deflected_y
+
       
       return ximage,yimage
 

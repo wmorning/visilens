@@ -51,6 +51,12 @@ class DifferentialEvolution(object):
                         ndim += 1
                         p0.append(vars(ilens)[key]['value'])
                         colnames.append(key+'L'+str(i))
+            if ilens.__class__.__name__=='PowerKappa':
+                for key in ['x','y','M','ex','ey','gamma','rc']:
+                    if not vars(ilens)[key]['fixed']:
+                        ndim += 1
+                        p0.append(vars(ilens)[key]['value'])
+                        colnames.append(key+'L'+str(i))
             elif ilens.__class__.__name__=='ExternalShear':
                 for key in ['shear','shearangle']:
                     if not vars(ilens)[key]['fixed']:
@@ -164,6 +170,7 @@ class DifferentialEvolution(object):
         # has these initial deflections.
         for i,ilens in enumerate(self.lens):
             if ilens.__class__.__name__ == 'SIELens': ilens.deflect(self.xemit,self.yemit,self.Dd,self.Ds,self.Dds)
+            elif ilens.__class__.__name__ == 'PowerKappa': ilens.deflect(self.xemit,self.yemit,self.Dd,self.Ds,self.Dds)
             elif ilens.__class__.__name__ == 'ExternalShear': ilens.deflect(self.xemit,self.yemit,self.lens[0])
             elif ilens.__class__.__name__ == 'Multipoles': ilens.deflect(self.xemit,self.yemit,self.lens[0])
             
@@ -217,6 +224,7 @@ class DifferentialEvolution(object):
         if it improves the fit, and replace existing vectors
         with the trial vectors.
         """
+        Naccepted = 0
         for i in range(self.VECTORS.shape[0]):
             
             f1 = self.CURRENT_FX[i]
@@ -229,10 +237,21 @@ class DifferentialEvolution(object):
                 if (f2 <= f1):
                     self.VECTORS[i,:] = self.TRIALS[i,:]
                     self.CURRENT_FX[i] = f2
+                    Naccepted += 1
             else:
                 pass
+            
+        return Naccepted
+        
+    def SaveData(self,N,filename_prefix):
+        """
+        Saves up to the current state of the optimizer to the specified file location
+        """
+        
+        np.save(filename_prefix+'_samples.npy',self.SAMPLES[:,:N,:])
+        np.save(filename_prefix+'_chi2.npy',self.CHI2[:,:N])
                     
-    def Optimize(self,Niter,ConvThresh):
+    def Optimize(self,Niter,ConvThresh,FileWriteNumIter=False,filename_prefix='temp'):
         """
         Run the optimization for Niter iterations, or until
         ConvThresh is reached.  Create a block of samples that we can plot or save.
@@ -245,7 +264,7 @@ class DifferentialEvolution(object):
         for i in range(Niter):
             self.Mutation()
             self.Recombination()
-            self.Selection()
+            Naccepted = self.Selection()
             self.SAMPLES[:,i,:] = self.VECTORS
             self.CHI2[:,i] = self.CURRENT_FX
             
@@ -254,7 +273,17 @@ class DifferentialEvolution(object):
                 self.CHI2 = self.CHI2[:,:i+1]
                 break
             
-            print "Interation:  " , i , "/", float(Niter), " Vector RMS:  " , np.std(self.VECTORS,axis=0)
+            print "---------- Interation:  " , i , "/", float(Niter) , "----------"
+            print "Number of accepted proposals:  " ,  Naccepted
+            print "Best chi2:  " , np.min(self.CURRENT_FX)
+            print "Vector RMS:  " , np.std(self.VECTORS,axis=0)
+            
+            # Save the data if asked to do so
+            try:
+                if i % FileWriteNumIter ==0:
+                    self.SaveData(i,filename_prefix)
+            except:
+                pass
         
         print "Optimization has Converged"
         print "Best Parameters:  " , self.VECTORS[np.argmin(self.CURRENT_FX),:]

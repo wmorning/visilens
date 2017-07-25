@@ -130,6 +130,14 @@ def pass_priors(p,lens,source,scaleamp,shiftphase):
                               thislens[i]._altered = True
                               thislens[i].__dict__[key]['value'] = p[ip]
                               ip += 1
+            elif ilens.__class__.__name__=='PowerKappa':
+                for key in ['x','y','M','ex','ey','gamma','rc']:
+                    if not vars(ilens)[key]['fixed']:
+                        # A uniform prior
+                        if p[ip] < vars(ilens)[key]['prior'][0] or p[ip] > vars(ilens)[key]['prior'][1]: return False
+                        thislens[i]._altered=True
+                        thislens[i].__dict__[key]['value'] = p[ip]
+                        ip += 1
             elif ilens.__class__.__name__=='ExternalShear':
                   for key in ['shear','shearangle']:
                         if not vars(ilens)[key]['fixed']:

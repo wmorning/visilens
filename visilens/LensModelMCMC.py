@@ -119,6 +119,13 @@ def LensModelMCMC(data,lens,source,
                               ndim += 1
                               p0.append(vars(ilens)[key]['value'])
                               colnames.append(key+'L'+str(i))
+            elif ilens.__class__.__name__=='PowerKappa':
+                for key in ['x','y','M','ex','ey','gamma','rc']:
+                    if not vars(ilens)[key]['fixed']:
+                        ndim += 1
+                        p0.append(vars(ilens)[key]['value'])
+                        colnames.append(key+'L'+str(i))                  
+            
             elif ilens.__class__.__name__=='ExternalShear':
                   for key in ['shear','shearangle']:
                         if not vars(ilens)[key]['fixed']:
@@ -204,7 +211,7 @@ def LensModelMCMC(data,lens,source,
       # Create a ball of starting points for the walkers, gaussian ball of 
       # 10% width; if initial value is 0 (eg, astrometric shift), give a small sigma
       # for angles, generally need more spread than 10% to sample well, do 30% for those cases [~0.5% >180deg for p0=100deg]
-      isangle = np.array([0.30 if 'PA' in s or 'angle' in s else 0.1 for s in colnames])
+      isangle = np.array([0.30 if 'PA' in s or 'angle' in s else 0.005 for s in colnames])
       initials = emcee.utils.sample_ball(p0,np.asarray([isangle[i]*x if x else 0.005 for i,x in enumerate(p0)]),int(nwalkers))
 
       # All the lens objects know if their parameters have been altered since the last time
@@ -213,6 +220,7 @@ def LensModelMCMC(data,lens,source,
       # has these initial deflections.
       for i,ilens in enumerate(lens):
             if ilens.__class__.__name__ == 'SIELens': ilens.deflect(xemit,yemit,Dd,Ds,Dds)
+            elif ilens.__class__.__name__ == 'PowerKappa': ilens.deflect(xemit,yemit,Dd,Ds,Dds)
             elif ilens.__class__.__name__ == 'ExternalShear': ilens.deflect(xemit,yemit,lens[0])
             elif ilens.__class__.__name__ == 'Multipoles': ilens.deflect(xemit,yemit,lens[0])
 
@@ -289,6 +297,8 @@ def LensModelMCMC(data,lens,source,
 
       mcmcresult['chains'] = np.core.records.fromarrays(np.hstack((lenssampler.flatchain[~bad],mus[~bad])).T,names=colnames)
       mcmcresult['lnlike'] = lenssampler.flatlnprobability[~bad]
+      mcmcresult['lnlike_full'] = lenssampler.lnprobability
+      mcmcresult['chains_full'] = lenssampler.chain
       
       # Keep track of best-fit params, derived from chains.
       c = copy.deepcopy(mcmcresult['chains'])
@@ -303,6 +313,12 @@ def LensModelMCMC(data,lens,source,
                         if not vars(ilens)[key]['fixed']:
                               ilens.__dict__[key]['value'] = np.median(c[key+'L'+str(i)])
                               pbest.append(np.median(c[key+'L'+str(i)]))
+            elif ilens.__class__.__name__=='PowerKappa':
+                ilens.__dict__['_altered'] = True
+                for key in ['x','y','M','ex','ey','gamma','rc']:
+                    if not vars(ilens)[key]['fixed']:
+                        ilens.__dict__[key]['value'] = np.median(c[key+'L'+str(i)])
+                        pbest.append(np.median(c[key+'L'+str(i)]))
             elif ilens.__class__.__name__ == 'ExternalShear':
                   for key in ['shear','shearangle']:
                         if not vars(ilens)[key]['fixed']:
