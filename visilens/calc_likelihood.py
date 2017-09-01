@@ -58,6 +58,7 @@ def calc_vis_lnlike(p,data,lens,source,
       try: thislens,thissource,thisascale,thispshift = x
       except TypeError: return -np.inf,[np.nan]
       
+      
       # Ok, if we've made it this far we can do the actual likelihood calculation
       # Loop through all the datasets, fitting the requested sources to each. We'll also calculate
       # magnifications for each source, defined as the sum of the output flux / input flux
@@ -84,10 +85,10 @@ def calc_vis_lnlike(p,data,lens,source,
                   
             # Calculate the contribution to chi2 from this dataset
             else: lnL -= (((dset.real - interpdata.real)**2. + (dset.imag - interpdata.imag)**2.)/dset.sigma**2.).sum()
-
+    
       # Last-ditch attempt to keep from hanging
       if np.isnan(lnL): return -np.inf,[np.nan]
-      
+      print lnL , p
       return lnL,[mus,dphases]
       
 def pass_priors(p,lens,source,scaleamp,shiftphase):
@@ -146,7 +147,7 @@ def pass_priors(p,lens,source,scaleamp,shiftphase):
                               thislens[i].__dict__[key]['value'] = p[ip]
                               ip += 1
             elif ilens.__class__.__name__=='Multipoles':
-                  for key in ['A3','B3','A4','B4']:
+                  for key in ['A2','B2','A3','B3','A4','B4']:
                         if not vars(ilens)[key]['fixed']:
                               if p[ip] < vars(ilens)[key]['prior'][0] or p[ip] > vars(ilens)[key]['prior'][1]: return False
                               thislens[i]._altered = True

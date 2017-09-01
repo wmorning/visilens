@@ -419,8 +419,9 @@ class PowerKappa(object):
     def compute_Q(self,Dd,Ds,Dds):
         """
         The Barkana 1998 model uses an annoying parameter Q for the deflection scale.
-        It is a mixed combination of a number of things, so we set this function aside
-        so that all the ugly math can be done here rather than in the deflect function.
+        It is a mixed combination of a number of physically relevant things, so we set 
+        this function aside so that all the ugly math can be done here rather than in 
+        the deflect function.
         """
         Mass = 10**(10*self.M['value']) * units.solMass
         q = 1- 0.1 * np.sqrt(self.ex['value']**2+self.ey['value']**2)
@@ -530,6 +531,9 @@ class Multipoles(object):
     
     Parameters:
     
+    A2 B2
+            The 2nd order angular multipole components. (shear)
+    
     A3 B3 
             The 3rd order angular multipole components.  Together they 
             define the amplitude and phase.
@@ -541,8 +545,12 @@ class Multipoles(object):
     Iterate over the elements of the list.
     """
     
-    def __init__(self,A3,B3,A4,B4):
+    def __init__(self,A2,B2,A3,B3,A4,B4):
         # Handle inputs
+        if not isinstance(A2,dict):
+              A2 = {'value':A2,'fixed':False,'prior':[-100.,100.]}
+        if not isinstance(B3,dict):
+              B2 = {'value':B2,'fixed':False,'prior':[-100.,100.]}
         if not isinstance(A3,dict):
               A3 = {'value':A3,'fixed':False,'prior':[-100.,100.]}
         if not isinstance(B3,dict):
@@ -554,16 +562,22 @@ class Multipoles(object):
         if not all(['value' in d for d in [A3,B3,A4,A4]]): 
               raise KeyError("All parameter dicts must contain the key 'value'.")
         
+        if not 'fixed' in A2: A2['fixed'] = False
+        if not 'fixed' in B2: B2['fixed'] = False
         if not 'fixed' in A3: A3['fixed'] = False
         if not 'fixed' in B3: B3['fixed'] = False
         if not 'fixed' in A3: A4['fixed'] = False
         if not 'fixed' in B3: B4['fixed'] = False
 
+        if not 'prior' in A2: A2['prior'] = [-100.,100.]
+        if not 'prior' in B2: B2['prior'] = [-100.,100.]
         if not 'prior' in A3: A3['prior'] = [-100.,100.]
         if not 'prior' in B3: B3['prior'] = [-100.,100.]
         if not 'prior' in A4: A4['prior'] = [-100.,100.]
         if not 'prior' in B4: B4['prior'] = [-100.,100.]
-
+        
+        self.A2 = A2
+        self.B2 = B2
         self.A3 = A3
         self.B3 = B3
         self.A4 = A4
@@ -589,24 +603,31 @@ class Multipoles(object):
         
         # Convert positions to polar coordinates, and rotate
         r,theta = cart2pol(ximage,yimage)
-        theta -= (lens.PA['value']*deg2rad)
+        #theta -= (lens.PA['value']*deg2rad)
         r *= np.pi / 180.0 / 3600.0
         
         # Rs defines radial scaling of multipole deflection
         Rs = np.pi / 180.0 / 3600.0
         # Gamma defines slope of this radial scaling
         GAMMA = lens.gamma['value']
+        a2 = self.A2['value']
+        b2 = self.B2['value']
         a3 = self.A3['value']
         b3 = self.B3['value']
         a4 = self.A4['value']
         b4 = self.B4['value']
         
         # Compute non-rotated deflections in polar coordinates
-        # Third order multipole
-        alphaR = (1./(GAMMA**2-4.*GAMMA-5.)) * (2.-GAMMA)*(r**(1.-GAMMA)/(Rs)**(-GAMMA)) * (a3*np.cos(3.0*theta)+b3*np.sin(3.0*theta))
-        alphaTheta = (3./(GAMMA**2.-4.*GAMMA-5.) * (r**(1-GAMMA)/(Rs)**-GAMMA)) * (-a3*np.sin(3.0*theta)+b3*np.cos(3.0*theta))
         
-        # 4th order multipole
+        # Second order multipole (shear)
+        alphaR = a2 * r * np.cos(2*theta) + b2* r * np.sin(2*theta)
+        alphaTheta = -a2 * r * np.sin(2*theta) + b2 * r * np.cos(2*theta)
+        
+        # Third order multipole
+        alphaR += (1./(GAMMA**2-4.*GAMMA-5.)) * (2.-GAMMA)*(r**(1.-GAMMA)/(Rs)**(-GAMMA)) * (a3*np.cos(3.0*theta)+b3*np.sin(3.0*theta))
+        alphaTheta += (3./(GAMMA**2.-4.*GAMMA-5.) * (r**(1-GAMMA)/(Rs)**-GAMMA)) * (-a3*np.sin(3.0*theta)+b3*np.cos(3.0*theta))
+        
+        # Fourth order multipole
         alphaR += (1./(GAMMA**2-4.*GAMMA-12.)) * (2.-GAMMA)*(r**(1.-GAMMA)/(Rs)**(-GAMMA)) * (a4*np.cos(4.0*theta)+b4*np.sin(4.0*theta))
         alphaTheta += (4./(GAMMA**2-4.*GAMMA-12.) * (r**(1.-GAMMA)/(Rs)**-GAMMA)) * (-a4*np.sin(4.0*theta)+b4*np.cos(4.0*theta))
         

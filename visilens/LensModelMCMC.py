@@ -133,7 +133,7 @@ def LensModelMCMC(data,lens,source,
                               p0.append(vars(ilens)[key]['value'])
                               colnames.append(key)
             elif ilens.__class__.__name__=='Multipoles':
-                  for key in ['A3','B3','A4','B4']:
+                  for key in ['A2','B2','A3','B3','A4','B4']:
                         if not vars(ilens)[key]['fixed']:
                               ndim += 1
                               p0.append(vars(ilens)[key]['value'])
@@ -325,7 +325,7 @@ def LensModelMCMC(data,lens,source,
                               ilens.__dict__[key]['value'] = np.median(c[key])
                               pbest.append(np.median(c[key]))
             elif ilens.__class__.__name__ == 'Multipoles':
-                  for key in ['A3','B3','A4','B4']:
+                  for key in ['A2','B2','A3','B3','A4','B4']:
                         if not vars(ilens)[key]['fixed']:
                               ilens.__dict__[key]['value'] = np.median(c[key])
                               pbest.append(np.median(c[key]))
