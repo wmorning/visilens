@@ -88,7 +88,7 @@ def calc_vis_lnlike(p,data,lens,source,
     
       # Last-ditch attempt to keep from hanging
       if np.isnan(lnL): return -np.inf,[np.nan]
-      print lnL , p
+      #print lnL , p
       return lnL,[mus,dphases]
       
 def pass_priors(p,lens,source,scaleamp,shiftphase):
