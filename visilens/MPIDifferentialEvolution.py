@@ -234,13 +234,30 @@ class MPI_DifferentialEvolution(object):
             
         return Naccepted
         
-    def ConvergenceCheck(self,):
+    def ConvergenceCheck(self):
         '''
         Check if current vectors have a small enough RMS scatter
         or if their chi2 are within a certain precision
         
         if either are met return True, else return False
         '''
+        
+        if np.mean(np.std(self.VECTORS,axis=1)) < ConvThresh:
+            # parameters all the same.  Sampler has converged
+            return True
+
+        elif abs(np.max(self.CURRENT_FX)-np.min(self.CURRENT_FX)) < chi2_thresh:
+            # all the chi2 are about the same... probably has converged
+            return True
+        else:
+            return False
+        
+    def SaveData(self,filename_prefix):
+        '''
+        Save the chains to numpy binary files
+        '''
+        np.save(filename_prefix+'_samples.npy',self.SAMPLES[:,:N,:])
+        np.save(filename_prefix+'_chi2.npy',self.CHI2[:,:N])
         
     def Optimize(self,Niter,num_gangs=1,ConvThresh=1e-7,FileWriteNumIter=False,filename_prefix='temp',chi2_thresh=1e-7):
         
