@@ -234,7 +234,7 @@ class MPI_DifferentialEvolution(object):
             
         return Naccepted
         
-    def ConvergenceCheck(self):
+    def ConvergenceCheck(self,ConvThresh=1.0e-7,chi2_thresh=0.001):
         '''
         Check if current vectors have a small enough RMS scatter
         or if their chi2 are within a certain precision
@@ -356,7 +356,7 @@ class MPI_DifferentialEvolution(object):
             comm.Bcast(self.CURRENT_FX,root=0)
             
             # Each process should check if sampling has converged
-            if self.ConvergenceCheck():
+            if self.ConvergenceCheck(ConvThresh,chi2_thresh):
                 break
         if rank ==0:
             print "Optimization has Converged"
