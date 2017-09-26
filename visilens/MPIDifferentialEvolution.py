@@ -252,10 +252,11 @@ class MPI_DifferentialEvolution(object):
         else:
             return False
         
-    def SaveData(self,filename_prefix):
+    def SaveData(self,N,filename_prefix):
         '''
-        Save the chains to numpy binary files
+        Save the first N samples in each chain to numpy binary files
         '''
+        print "Saving data to "+filename_prefix
         np.save(filename_prefix+'_samples.npy',self.SAMPLES[:,:N,:])
         np.save(filename_prefix+'_chi2.npy',self.CHI2[:,:N])
         
