@@ -136,9 +136,13 @@ def pass_priors(p,lens,source,scaleamp,shiftphase):
                     if not vars(ilens)[key]['fixed']:
                         # A uniform prior
                         if p[ip] < vars(ilens)[key]['prior'][0] or p[ip] > vars(ilens)[key]['prior'][1]: return False
+                        
+                        # Separate prior on ellipticity
                         thislens[i]._altered=True
                         thislens[i].__dict__[key]['value'] = p[ip]
                         ip += 1
+                # Second prior for ellipticity
+                if np.sqrt(ilens[i]['ex']['value']**2+thislens[i]['ey']['value']**2)/10. > 1: return False
             elif ilens.__class__.__name__=='ExternalShear':
                   for key in ['shear','shearangle']:
                         if not vars(ilens)[key]['fixed']:
@@ -370,6 +374,9 @@ def fft_interpolate(visdata,immap,xmap,ymap,ug=None,scaleamp=1.,shiftphase=[0.,0
       if ug is None:
             kmax = 0.5/((xmap[0,1]-xmap[0,0])*arcsec2rad)
             ug = np.linspace(-kmax,kmax,xmap.shape[0])
+            
+            # Warren:  Try and see if this ameliorates x-bias in parameters.
+            ug = np.fft.fftfreq(xmap.shape[0],(xmap[0,1]-xmap[0,0])*arcsec2rad)
 
       # Interpolate the FFT'd image onto the data's uv points
       # Using RBS, much faster since ug is gridded
