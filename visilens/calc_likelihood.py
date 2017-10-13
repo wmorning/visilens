@@ -142,7 +142,7 @@ def pass_priors(p,lens,source,scaleamp,shiftphase):
                         thislens[i].__dict__[key]['value'] = p[ip]
                         ip += 1
                 # Second prior for ellipticity
-                if np.sqrt(ilens['ex']['value']**2+ilens['ey']['value']**2)/10. > 1: return False
+                if np.sqrt(vars(ilens)['ex']['value']**2+vars(ilens)['ey']['value']**2)/10. > 1: return False
             elif ilens.__class__.__name__=='ExternalShear':
                   for key in ['shear','shearangle']:
                         if not vars(ilens)[key]['fixed']:
