@@ -276,8 +276,8 @@ def SourceProfile(xsource,ysource,source,lens):
                   return ValueError("Lensed point sources not working yet... try a"\
                    "gaussian with small width instead...")
             else:
-                  xs = source.xoff['value']
-                  ys = source.yoff['value']
+                  xs = source.xoff['value'] + lens[0].x['value']
+                  ys = source.yoff['value'] + lens[0].y['value']
                   
             yloc = np.abs(xsource[0,:] - xs).argmin()
             xloc = np.abs(ysource[:,0] - ys).argmin()
